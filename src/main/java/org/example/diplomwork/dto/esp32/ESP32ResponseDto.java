@@ -12,7 +12,7 @@ public class ESP32ResponseDto {
     private String message;
     private String direction;
     private Integer speed;
-    private Float angle;
+    private Double angle;
     private Long timestamp;
     private Integer operationId;
     private Boolean isMoving;

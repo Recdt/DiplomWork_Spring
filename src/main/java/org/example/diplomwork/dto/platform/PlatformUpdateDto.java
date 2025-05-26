@@ -7,7 +7,7 @@ import org.example.diplomwork.entities.Position;
 public class PlatformUpdateDto {
     private String type;
     private Position position;
-    private Float angle;
+    private Double angle;
     private Integer speed;
     private String direction;
     private Boolean isMoving;

@@ -193,7 +193,7 @@ public class MqttCommunicationService implements CommunicationService {
         return connected && mqttClient != null && mqttClient.isConnected();
     }
 
-    private String sendAndWaitForResponse(Map<String, Object> command) throws Exception {
+    public String sendAndWaitForResponse(Map<String, Object> command) throws Exception {
         if (!isConnected()) {
             connect();
         }

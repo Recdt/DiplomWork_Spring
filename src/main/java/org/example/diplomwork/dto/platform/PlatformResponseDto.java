@@ -12,7 +12,7 @@ public class PlatformResponseDto {
     private String status;
     private Position position;
     private String direction;
-    private Float angle;
+    private Double angle;
     private Double distanceTravelled;
 
     public PlatformResponseDto(String status, Position position, String direction) {

@@ -29,9 +29,13 @@ public class PlatformService {
 
     private final List<MovementHistory> movementHistory;
     private final Position currentPosition;
-    private Float currentAngle = 0.0f;
+    private Double currentAngle = 0.0;
     private Double totalDistance = 0.0;
     private Double wheelRadius = 0.03;
+
+    private long lastMovementTime = 0;
+    private final double maxRPM = 200.0;
+    private final double movementTimeInterval = 0.1;
 
     private CommunicationProtocol currentProtocol = CommunicationProtocol.HTTP;
     private CommunicationService currentService;
@@ -45,8 +49,9 @@ public class PlatformService {
         this.mqttService = mqttService;
         this.wsBroadcastService = wsBroadcastService;
         this.movementHistory = new ArrayList<>();
-        this.currentPosition = new Position(0, 0);
+        this.currentPosition = new Position(0., 0.);
         this.currentService = httpService;
+        this.lastMovementTime = System.currentTimeMillis();
     }
 
     public PlatformResponseDto movePlatform(MoveRequestDto moveRequest) {
@@ -157,50 +162,93 @@ public class PlatformService {
         } else if (request.angle() != null) {
             this.currentAngle = request.angle();
         }
-        double distance = calculateDistance(request.speed());
+
+        double distance = calculateRealisticDistance(request.speed());
         updatePositionBasedOnDirection(request.direction(), distance);
         totalDistance += Math.abs(distance);
+
+        log.debug("Movement - Direction: {}, Speed: {}, Distance: {:.4f}m, Total: {:.4f}m",
+                request.direction(), request.speed(), distance, totalDistance);
     }
 
-    private double calculateDistance(int speed) {
-        double motorFactor = speed / 255.0;
-        double baseDistance = 0.1;
-        return baseDistance * motorFactor * wheelRadius / 0.03;
+    private double calculateRealisticDistance(int motorSpeed) {
+        long currentTime = System.currentTimeMillis();
+        double deltaTime = (currentTime - lastMovementTime) / 1000.0;
+        lastMovementTime = currentTime;
+        if (deltaTime > 1.0 || deltaTime <= 0) {
+            deltaTime = movementTimeInterval;
+        }
+        double speedPercentage = Math.max(0, Math.min(255, motorSpeed)) / 255.0;
+        double currentRPM = maxRPM * speedPercentage;
+        double rotations = (currentRPM / 60.0) * deltaTime;
+        double wheelCircumference = 2 * Math.PI * wheelRadius;
+
+        double distance = rotations * wheelCircumference;
+
+        log.debug("Speed: {}%, RPM: {:.2f}, Time: {:.3f}s, Rotations: {:.4f}, Distance: {:.4f}m",
+                speedPercentage * 100, currentRPM, deltaTime, rotations, distance);
+
+        return distance;
     }
 
     private void updatePositionBasedOnDirection(String direction, double distance) {
         switch (direction) {
             case "forward":
-                currentPosition.setX((int) (currentPosition.getX() +
-                                        distance * Math.cos(Math.toRadians(currentAngle))));
-                currentPosition.setY((int) (currentPosition.getY() +
-                                        distance * Math.sin(Math.toRadians(currentAngle))));
+                double deltaX = distance * Math.cos(Math.toRadians(currentAngle));
+                double deltaY = distance * Math.sin(Math.toRadians(currentAngle));
+                currentPosition.setX(currentPosition.getX() + deltaX);
+                currentPosition.setY(currentPosition.getY() + deltaY);
+                log.debug("Forward movement - DeltaX: {:.4f}, DeltaY: {:.4f}, New pos: ({:.4f}, {:.4f})",
+                        deltaX, deltaY, currentPosition.getX(), currentPosition.getY());
                 break;
+
             case "backward":
-                currentPosition.setX((int) (currentPosition.getX() -
-                                        distance * Math.cos(Math.toRadians(currentAngle))));
-                currentPosition.setY((int) (currentPosition.getY() -
-                                        distance * Math.sin(Math.toRadians(currentAngle))));
+                double backDeltaX = -distance * Math.cos(Math.toRadians(currentAngle));
+                double backDeltaY = -distance * Math.sin(Math.toRadians(currentAngle));
+                currentPosition.setX(currentPosition.getX() + backDeltaX);
+                currentPosition.setY(currentPosition.getY() + backDeltaY);
+                log.debug("Backward movement - DeltaX: {:.4f}, DeltaY: {:.4f}, New pos: ({:.4f}, {:.4f})",
+                        backDeltaX, backDeltaY, currentPosition.getX(), currentPosition.getY());
                 break;
+
             case "left":
-                currentAngle -= 5;
+                double leftTurnAngle = calculateTurnAngle(distance);
+                currentAngle -= leftTurnAngle;
                 if (currentAngle < 0) currentAngle += 360;
+                log.debug("Left turn - Angle change: {:.2f}°, New angle: {:.2f}°",
+                        leftTurnAngle, currentAngle);
                 break;
+
             case "right":
-                currentAngle += 5;
+                double rightTurnAngle = calculateTurnAngle(distance);
+                currentAngle += rightTurnAngle;
                 if (currentAngle >= 360) currentAngle -= 360;
+                log.debug("Right turn - Angle change: {:.2f}°, New angle: {:.2f}°",
+                        rightTurnAngle, currentAngle);
                 break;
         }
     }
 
+    private double calculateTurnAngle(double wheelDistance) {
+        double wheelbase = 0.2;
+        double angleRadians = wheelDistance / (wheelbase / 2);
+        double angleDegrees = Math.toDegrees(angleRadians);
+        return Math.min(angleDegrees, 10.0);
+    }
+
     public PlatformResponseDto resetPosition() {
-        currentPosition.setX(0);
-        currentPosition.setY(0);
-        currentAngle = 0.0f;
+        currentPosition.setX(0.);
+        currentPosition.setY(0.);
+        currentAngle = 0.0;
+        totalDistance = 0.0;
+        lastMovementTime = System.currentTimeMillis();
+
+        log.info("Position reset to origin");
 
         PlatformResponseDto response = new PlatformResponseDto();
-        response.setPosition(new Position(0, 0));
-        response.setAngle(0.0f);
+        response.setPosition(new Position(0., 0.));
+        response.setAngle(0.0);
+        response.setDistanceTravelled(0.0);
 
         return response;
     }
@@ -250,12 +298,20 @@ public class PlatformService {
     }
 
     public void setWheelRadius(Double radius) {
+        if (radius < 0.01 || radius > 0.1) {
+            throw new IllegalArgumentException("Wheel radius must be between 0.01m and 0.1m");
+        }
+
+        double oldRadius = this.wheelRadius;
         this.wheelRadius = radius;
-        log.info("Wheel radius updated to: {}m", radius);
+
+        log.info("Wheel radius updated from {}m to {}m", oldRadius, radius);
+        log.info("Wheel circumference: {:.4f}m", 2 * Math.PI * radius);
 
         PlatformUpdateDto configUpdate = new PlatformUpdateDto();
         configUpdate.setType("CONFIG_UPDATE");
-        configUpdate.setMessage("Wheel radius updated to: " + radius + "m");
+        configUpdate.setMessage(String.format("Wheel radius updated to %.3fm (circumference: %.4fm)",
+                radius, 2 * Math.PI * radius));
         configUpdate.setTimestamp(System.currentTimeMillis());
 
         wsBroadcastService.broadcastPlatformUpdate(configUpdate);

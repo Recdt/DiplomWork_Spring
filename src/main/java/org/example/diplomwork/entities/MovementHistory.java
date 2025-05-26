@@ -12,6 +12,6 @@ public class MovementHistory {
     private Integer speed;
     private Long timestamp;
     private Position position;
-    private Float angle;
+    private Double angle;
     private Double distanceTravelled;
 }

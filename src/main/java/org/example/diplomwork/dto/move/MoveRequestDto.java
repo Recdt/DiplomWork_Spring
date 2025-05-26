@@ -13,7 +13,7 @@ public record MoveRequestDto(
         @Min(value = 0, message = "Speed must be between 0 and 255")
         @Max(value = 255, message = "Speed must be between 0 and 255")
         Integer speed,
-        Float angle,
+        Double angle,
         @NotNull(message = "Communication protocol is required")
         CommunicationProtocol protocol
 ){}

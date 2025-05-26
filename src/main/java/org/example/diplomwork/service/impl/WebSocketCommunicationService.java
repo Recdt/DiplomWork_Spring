@@ -131,7 +131,7 @@ public class WebSocketCommunicationService implements CommunicationService {
         return connected && session != null && session.isOpen();
     }
 
-    private <T> T sendCommand(Map<String, Object> command, Class<T> responseType) throws Exception {
+    public <T> T sendCommand(Map<String, Object> command, Class<T> responseType) throws Exception {
         if (!isConnected()) {
             connect();
         }

@@ -8,8 +8,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class PositionResponseDto {
-    private Integer x;
-    private Integer y;
+    private Double x;
+    private Double y;
     private Double distanceTravelled;
-    private Float angle;
+    private Double angle;
 }
