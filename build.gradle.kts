@@ -36,6 +36,8 @@ dependencies {
     implementation("org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5")
     implementation("org.springframework.integration:spring-integration-mqtt")
     implementation("org.java-websocket:Java-WebSocket:1.5.4")
+    implementation ("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.2.0")
+
     testImplementation("org.mockito:mockito-core:5.8.0")
     testImplementation("org.mockito:mockito-junit-jupiter:5.8.0")
     testImplementation("org.mockito:mockito-inline:5.2.0")
